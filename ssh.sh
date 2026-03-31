@@ -5,8 +5,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/lib.sh"
 
 ensure_machine_started
 
-readarray -t ssh_info < <(
-  python3 - "$OPENCLAW_DEMO_MACHINE" <<'PY'
+ssh_info="$(
+  python3 -c '
 import json
 import subprocess
 import sys
@@ -15,15 +15,13 @@ name = sys.argv[1]
 raw = subprocess.check_output(["podman", "machine", "inspect", name], text=True)
 data = json.loads(raw)[0]
 ssh = data["SSHConfig"]
-print(ssh["RemoteUsername"])
-print(str(ssh["Port"]))
-print(ssh["IdentityPath"])
-PY
-)
+print("{}\t{}\t{}".format(ssh["RemoteUsername"], ssh["Port"], ssh["IdentityPath"]))
+' "$OPENCLAW_DEMO_MACHINE"
+)"
 
-remote_user="${ssh_info[0]}"
-remote_port="${ssh_info[1]}"
-identity_path="${ssh_info[2]}"
+remote_user="$(printf '%s' "$ssh_info" | cut -f1)"
+remote_port="$(printf '%s' "$ssh_info" | cut -f2)"
+identity_path="$(printf '%s' "$ssh_info" | cut -f3)"
 
 ssh_base=(
   ssh

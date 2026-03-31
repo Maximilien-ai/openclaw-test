@@ -6,6 +6,9 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/lib.sh"
 print_step "Ensuring the dedicated Podman machine is up"
 ensure_machine
 
+print_step "Installing OpenClaw inside the machine if needed"
+ensure_remote_openclaw_installed
+
 print_step "OpenClaw version in the machine"
 run_remote_sh "openclaw --version"
 
