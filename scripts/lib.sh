@@ -71,6 +71,25 @@ machine_running() {
   [[ "$state" == "running" ]]
 }
 
+ensure_machine_started() {
+  ensure_podman
+
+  if ! machine_exists; then
+    print_step "Creating dedicated Podman machine: $OPENCLAW_DEMO_MACHINE"
+    run_cmd podman machine init \
+      --cpus "$OPENCLAW_DEMO_CPUS" \
+      --memory "$OPENCLAW_DEMO_MEMORY_MB" \
+      --disk-size "$OPENCLAW_DEMO_DISK_GB" \
+      "$OPENCLAW_DEMO_MACHINE"
+  fi
+
+  if ! machine_running; then
+    stop_other_running_machines
+    print_step "Starting Podman machine: $OPENCLAW_DEMO_MACHINE"
+    run_cmd podman machine start "$OPENCLAW_DEMO_MACHINE"
+  fi
+}
+
 wait_for_machine_ssh() {
   local attempt
   print_step "Waiting for SSH access to the Podman machine"
@@ -114,23 +133,7 @@ PY
 }
 
 ensure_machine() {
-  ensure_podman
-
-  if ! machine_exists; then
-    print_step "Creating dedicated Podman machine: $OPENCLAW_DEMO_MACHINE"
-    run_cmd podman machine init \
-      --cpus "$OPENCLAW_DEMO_CPUS" \
-      --memory "$OPENCLAW_DEMO_MEMORY_MB" \
-      --disk-size "$OPENCLAW_DEMO_DISK_GB" \
-      "$OPENCLAW_DEMO_MACHINE"
-  fi
-
-  if ! machine_running; then
-    stop_other_running_machines
-    print_step "Starting Podman machine: $OPENCLAW_DEMO_MACHINE"
-    run_cmd podman machine start "$OPENCLAW_DEMO_MACHINE"
-  fi
-
+  ensure_machine_started
   wait_for_machine_ssh
 }
 

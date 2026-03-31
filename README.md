@@ -12,9 +12,11 @@ The scripts print the commands they run. The only thing they intentionally redac
    Starts the VM and the OpenClaw gateway service again later.
 3. `test.sh`
    Runs `openclaw --version`, `openclaw gateway status`, and `openclaw doctor --non-interactive` inside the VM.
-4. `create-agent.sh`
+4. `ssh.sh`
+   Opens a direct SSH session into the Podman VM or runs a single command there.
+5. `create-agent.sh`
    Creates a demo agent whose workspace is tracked in this repo under `agents/demo-agent/workspace/`.
-5. `agent-demo.sh`
+6. `agent-demo.sh`
    Runs the demo agent against a public GitHub repository issue list.
 
 ## File layout
@@ -22,6 +24,7 @@ The scripts print the commands they run. The only thing they intentionally redac
 - [setup.sh](/Users/maximilien/github/Maximilien-ai/openclaw-test/setup.sh)
 - [start.sh](/Users/maximilien/github/Maximilien-ai/openclaw-test/start.sh)
 - [test.sh](/Users/maximilien/github/Maximilien-ai/openclaw-test/test.sh)
+- [ssh.sh](/Users/maximilien/github/Maximilien-ai/openclaw-test/ssh.sh)
 - [create-agent.sh](/Users/maximilien/github/Maximilien-ai/openclaw-test/create-agent.sh)
 - [agent-demo.sh](/Users/maximilien/github/Maximilien-ai/openclaw-test/agent-demo.sh)
 - [scripts/lib.sh](/Users/maximilien/github/Maximilien-ai/openclaw-test/scripts/lib.sh)
@@ -77,8 +80,91 @@ export OPENCLAW_DEMO_MODEL="openai/gpt-5.2"
 ./setup.sh
 ./start.sh
 ./test.sh
+./ssh.sh
 ./create-agent.sh
 ./agent-demo.sh
+```
+
+## Direct VM access
+
+For live demos, `ssh.sh` is the practical escape hatch. It starts the dedicated machine if needed, resolves the machine's current SSH port and identity from `podman machine inspect`, and then connects directly instead of relying on `podman machine ssh`.
+
+Open an interactive shell:
+
+```bash
+./ssh.sh
+```
+
+Run a single command:
+
+```bash
+./ssh.sh openclaw --version
+./ssh.sh openclaw gateway status
+./ssh.sh openclaw doctor --non-interactive
+```
+
+This is useful if the automation gets stuck but the VM itself is still reachable.
+
+## Live demo fallback path
+
+If the full scripted flow gets stuck, use this exact sequence.
+
+Start the machine and open a shell in the VM:
+
+```bash
+./ssh.sh
+```
+
+From inside the VM, check the basics:
+
+```bash
+openclaw --version
+openclaw gateway status
+openclaw doctor --non-interactive
+```
+
+If OpenClaw is not installed yet inside the VM, install it with the same official installer used by `setup.sh`:
+
+```bash
+curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --no-onboard
+```
+
+If onboarding still needs to happen, run one of these:
+
+Without a model provider:
+
+```bash
+openclaw onboard --non-interactive --accept-risk --flow quickstart --install-daemon --skip-channels --skip-search --skip-skills --skip-ui --gateway-bind loopback --auth-choice skip
+```
+
+With OpenAI:
+
+```bash
+export OPENAI_API_KEY=...
+openclaw onboard --non-interactive --accept-risk --flow quickstart --install-daemon --skip-channels --skip-search --skip-skills --skip-ui --gateway-bind loopback --auth-choice openai-api-key --openai-api-key "$OPENAI_API_KEY"
+```
+
+Then continue the demo either from the host:
+
+```bash
+./test.sh
+./create-agent.sh
+./agent-demo.sh
+```
+
+Or manually from inside the VM:
+
+```bash
+openclaw agents list
+openclaw config file
+```
+
+If you just want a quick health check from the host without opening a shell:
+
+```bash
+./ssh.sh openclaw --version
+./ssh.sh openclaw gateway status
+./ssh.sh openclaw doctor --non-interactive
 ```
 
 ## Commands the scripts are wrapping
