@@ -26,17 +26,64 @@ run_cmd() {
   "$@"
 }
 
+resolve_machine_ssh_connection() {
+  local ssh_info
+  ssh_info="$(
+    python3 -c '
+import json
+import subprocess
+import sys
+
+name = sys.argv[1]
+raw = subprocess.check_output(["podman", "machine", "inspect", name], text=True)
+data = json.loads(raw)[0]
+ssh = data["SSHConfig"]
+print("{}\t{}\t{}".format(ssh["RemoteUsername"], ssh["Port"], ssh["IdentityPath"]))
+' "$OPENCLAW_DEMO_MACHINE"
+  )"
+
+  OPENCLAW_DEMO_SSH_USER="$(printf '%s' "$ssh_info" | cut -f1)"
+  OPENCLAW_DEMO_SSH_PORT="$(printf '%s' "$ssh_info" | cut -f2)"
+  OPENCLAW_DEMO_SSH_IDENTITY_PATH="$(printf '%s' "$ssh_info" | cut -f3)"
+}
+
 run_remote_sh() {
   local remote_script="$1"
-  printf '+ podman machine ssh %q -- bash -lc %q\n' "$OPENCLAW_DEMO_MACHINE" "$remote_script"
-  podman machine ssh "$OPENCLAW_DEMO_MACHINE" -- bash -lc "$remote_script"
+  local remote_command
+  resolve_machine_ssh_connection
+  remote_command="bash -lc $(printf '%q' "$remote_script")"
+  printf '+ ssh -i %q -p %q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %q %q\n' \
+    "$OPENCLAW_DEMO_SSH_IDENTITY_PATH" \
+    "$OPENCLAW_DEMO_SSH_PORT" \
+    "${OPENCLAW_DEMO_SSH_USER}@localhost" \
+    "$remote_command"
+  ssh \
+    -i "$OPENCLAW_DEMO_SSH_IDENTITY_PATH" \
+    -p "$OPENCLAW_DEMO_SSH_PORT" \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    "${OPENCLAW_DEMO_SSH_USER}@localhost" \
+    "$remote_command"
 }
 
 run_remote_sh_masked() {
   local display_script="$1"
   local remote_script="$2"
-  printf '+ podman machine ssh %q -- bash -lc %q\n' "$OPENCLAW_DEMO_MACHINE" "$display_script"
-  podman machine ssh "$OPENCLAW_DEMO_MACHINE" -- bash -lc "$remote_script"
+  local remote_command
+  resolve_machine_ssh_connection
+  remote_command="bash -lc $(printf '%q' "$remote_script")"
+  printf '+ ssh -i %q -p %q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %q %q\n' \
+    "$OPENCLAW_DEMO_SSH_IDENTITY_PATH" \
+    "$OPENCLAW_DEMO_SSH_PORT" \
+    "${OPENCLAW_DEMO_SSH_USER}@localhost" \
+    "bash -lc $(printf '%q' "$display_script")"
+  ssh \
+    -i "$OPENCLAW_DEMO_SSH_IDENTITY_PATH" \
+    -p "$OPENCLAW_DEMO_SSH_PORT" \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    "${OPENCLAW_DEMO_SSH_USER}@localhost" \
+    "$remote_command"
 }
 
 ensure_brew() {
