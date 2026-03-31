@@ -12,6 +12,7 @@ OPENCLAW_DEMO_AGENT_ID="${OPENCLAW_DEMO_AGENT_ID:-demo-agent}"
 OPENCLAW_DEMO_AGENT_WORKSPACE="${OPENCLAW_DEMO_AGENT_WORKSPACE:-$OPENCLAW_DEMO_REMOTE_REPO_ROOT/agents/demo-agent/workspace}"
 OPENCLAW_DEMO_AGENT_TEMPLATE="${OPENCLAW_DEMO_AGENT_TEMPLATE:-$OPENCLAW_DEMO_REMOTE_REPO_ROOT/agents/demo-agent/agent.template.json}"
 OPENCLAW_DEMO_TEST_TARGET="${OPENCLAW_DEMO_TEST_TARGET:-openclaw/openclaw}"
+OPENCLAW_DEMO_NODE_VERSION="${OPENCLAW_DEMO_NODE_VERSION:-22.19.0}"
 
 print_step() {
   printf '\n==> %s\n' "$*"
@@ -50,8 +51,11 @@ print("{}\t{}\t{}".format(ssh["RemoteUsername"], ssh["Port"], ssh["IdentityPath"
 run_remote_sh() {
   local remote_script="$1"
   local remote_command
+  local combined_script
   resolve_machine_ssh_connection
-  remote_command="bash -lc $(printf '%q' "$remote_script")"
+  combined_script="$(remote_user_env_prefix)
+$remote_script"
+  remote_command="bash -lc $(printf '%q' "$combined_script")"
   printf '+ ssh -i %q -p %q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %q %q\n' \
     "$OPENCLAW_DEMO_SSH_IDENTITY_PATH" \
     "$OPENCLAW_DEMO_SSH_PORT" \
@@ -70,13 +74,19 @@ run_remote_sh_masked() {
   local display_script="$1"
   local remote_script="$2"
   local remote_command
+  local combined_display_script
+  local combined_remote_script
   resolve_machine_ssh_connection
-  remote_command="bash -lc $(printf '%q' "$remote_script")"
+  combined_display_script="$(remote_user_env_prefix)
+$display_script"
+  combined_remote_script="$(remote_user_env_prefix)
+$remote_script"
+  remote_command="bash -lc $(printf '%q' "$combined_remote_script")"
   printf '+ ssh -i %q -p %q -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %q %q\n' \
     "$OPENCLAW_DEMO_SSH_IDENTITY_PATH" \
     "$OPENCLAW_DEMO_SSH_PORT" \
     "${OPENCLAW_DEMO_SSH_USER}@localhost" \
-    "bash -lc $(printf '%q' "$display_script")"
+    "bash -lc $(printf '%q' "$combined_display_script")"
   ssh \
     -i "$OPENCLAW_DEMO_SSH_IDENTITY_PATH" \
     -p "$OPENCLAW_DEMO_SSH_PORT" \
@@ -188,9 +198,45 @@ ensure_repo_visible_in_vm() {
   run_remote_sh "test -d $(printf '%q' "$OPENCLAW_DEMO_REMOTE_REPO_ROOT")"
 }
 
+remote_user_env_prefix() {
+  cat <<EOF
+export PATH="\$HOME/.local/bin:\$HOME/.local/share/node-v${OPENCLAW_DEMO_NODE_VERSION}-linux-arm64/bin:\$PATH"
+export npm_config_prefix="\$HOME/.local"
+EOF
+}
+
+ensure_remote_node_installed() {
+  print_step "Installing Node.js in the Podman machine if needed"
+  run_remote_sh "$(remote_user_env_prefix)
+if command -v node >/dev/null 2>&1; then
+  node --version
+else
+  mkdir -p \"\$HOME/.local/share\" \"\$HOME/.local/bin\"
+  cd \"\$HOME/.local/share\"
+  curl -fsSLO https://nodejs.org/dist/v${OPENCLAW_DEMO_NODE_VERSION}/node-v${OPENCLAW_DEMO_NODE_VERSION}-linux-arm64.tar.xz
+  tar -xf node-v${OPENCLAW_DEMO_NODE_VERSION}-linux-arm64.tar.xz
+  rm -f node-v${OPENCLAW_DEMO_NODE_VERSION}-linux-arm64.tar.xz
+  ln -sf \"\$HOME/.local/share/node-v${OPENCLAW_DEMO_NODE_VERSION}-linux-arm64/bin/node\" \"\$HOME/.local/bin/node\"
+  ln -sf \"\$HOME/.local/share/node-v${OPENCLAW_DEMO_NODE_VERSION}-linux-arm64/bin/npm\" \"\$HOME/.local/bin/npm\"
+  ln -sf \"\$HOME/.local/share/node-v${OPENCLAW_DEMO_NODE_VERSION}-linux-arm64/bin/npx\" \"\$HOME/.local/bin/npx\"
+  ln -sf \"\$HOME/.local/share/node-v${OPENCLAW_DEMO_NODE_VERSION}-linux-arm64/bin/corepack\" \"\$HOME/.local/bin/corepack\"
+  node --version
+  npm --version
+fi"
+}
+
 ensure_remote_openclaw_installed() {
   print_step "Installing OpenClaw in the Podman machine if needed"
-  run_remote_sh "if command -v openclaw >/dev/null 2>&1; then openclaw --version; else curl -fsSL --proto '=https' --tlsv1.2 https://openclaw.ai/install.sh | bash -s -- --no-onboard; openclaw --version; fi"
+  ensure_remote_node_installed
+  run_remote_sh "$(remote_user_env_prefix)
+if command -v openclaw >/dev/null 2>&1; then
+  openclaw --version
+else
+  mkdir -p \"\$HOME/.local/bin\"
+  npm install -g openclaw@latest
+  hash -r
+  openclaw --version
+fi"
 }
 
 resolve_onboard_provider() {
