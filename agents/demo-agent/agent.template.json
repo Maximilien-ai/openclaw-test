@@ -1,0 +1,11 @@
+{
+  "id": "demo-agent",
+  "workspace": "__WORKSPACE__",
+  "tools": {
+    "profile": "coding",
+    "allow": [
+      "group:web"
+    ]
+  },
+  "model": "__MODEL__"
+}
